@@ -53,7 +53,6 @@ uint8_t sm_byte_counter = 0;
 uint16_t sm_address = 0x0000;
 uint16_t sw_status = 0x0000;	// pad switch status
 uint8_t id_data[] = {MC_ACK1, MC_ACK2, 0x04, 0x00, 0x00, 0x80};
-
 _Noreturn void simulation_thread();
 
 /**
@@ -98,6 +97,38 @@ bool should_sync() {
 		}
 	}
 	return false;
+}
+
+bool should_switch() {
+	if(current_state == MC_IDLE) {
+		if(mc.exploit && mc.last_operation_timestamp > 0) {
+			if((to_ms_since_boot(get_absolute_time()) - mc.last_operation_timestamp) > SWITCH_MEMCARD_TIMEOUT)
+				return true;
+		}
+	}
+	return false;
+}
+
+int64_t switch_memcard() {
+	multicore_lockout_start_blocking();
+	uint32_t status;
+	memory_card_free(&mc);
+	status = memory_card_init(&mc, false);
+	if(status != MC_OK) {
+		while(true) {
+			led_blink_error(status);
+			sleep_ms(2000);
+		}
+	}
+	status = memory_card_import(&mc, MEMCARD_FILE_NAME);
+	if(status != MC_OK) {
+		while(true) {
+			led_blink_error(status);
+			sleep_ms(2000);
+		}
+	}
+	multicore_lockout_end_blocking();
+	return status;
 }
 
 void state_machine_tick(uint8_t data) {
@@ -149,9 +180,11 @@ void state_machine_tick(uint8_t data) {
 					break;
 				case 2:
 					sw_status = sw_status | (read_byte_blocking(pio0, smDatReader) << 8);
-					if(sw_status == (START & SELECT & TRIANGLE))	// perform manual sync
+					if(sw_status == (START & SELECT & TRIANGLE) && !mc.exploit) {
+						// perform manual sync
 						if(mc.out_of_sync)
 							memory_card_sync(&mc);
+					}
 					break;
 				default:
 					next_state = MC_IDLE;
@@ -317,19 +350,22 @@ _Noreturn void simulation_thread() {
 		if(should_sync()) {
 			memory_card_sync(&mc);
 		}
+		if (should_switch()) {
+			switch_memcard();
+		}
 	}
 }
 
 _Noreturn int simulate_memory_card() {
 	uint32_t status;
-	status = memory_card_init(&mc);
+	status = memory_card_init(&mc, true);
 	if(status != MC_OK) {
 		while(true) {
 			led_blink_error(status);
 			sleep_ms(2000);
 		}
 	}
-	status = memory_card_import(&mc, MEMCARD_FILE_NAME);
+	status = memory_card_import(&mc, FREEPSXBOOT_FILE_NAME);
 	if(status != MC_OK) {
 		while(true) {
 			led_blink_error(status);

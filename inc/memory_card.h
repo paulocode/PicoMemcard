@@ -32,10 +32,12 @@ typedef struct {
 	uint8_t flag_byte;
 	uint8_t* data;
 	bool out_of_sync;
+	bool exploit;
 	uint32_t last_operation_timestamp;
 } memory_card_t;
 
-uint32_t memory_card_init(memory_card_t* mc);
+uint32_t memory_card_init(memory_card_t* mc, bool exploit);
+uint32_t memory_card_free(memory_card_t* mc);
 uint32_t memory_card_import(memory_card_t* mc, uint8_t* file_name);
 bool memory_card_is_sector_valid(memory_card_t* mc, uint32_t sector);
 uint8_t* memory_card_get_sector_ptr(memory_card_t* mc, uint32_t sector);

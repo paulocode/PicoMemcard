@@ -198,7 +198,44 @@ uint32_t RAM_disk_export_lfs_memcard() {
 				status = 1;	// image has incorrect size
 			}
 			f_close(&memcard_fat);
-		} else {
+		} else if (FR_OK == f_open(&memcard_fat, FREEPSXBOOT_FILE_NAME, FA_READ)) {
+
+			/* Check virtual disk memory card size */
+			FSIZE_t fat_memcard_size = f_size(&memcard_fat);
+			if(fat_memcard_size <= MC_SIZE) {
+				if(LFS_ERR_OK == lfs_mount(&lfs, &LFS_CFG)) {
+					/* Prepare LFS memory card */
+					lfs_remove(&lfs, FREEPSXBOOT_FILE_NAME);	// remove old memory card file
+					if(LFS_ERR_OK == lfs_file_open(&lfs, &memcard_lfs, FREEPSXBOOT_FILE_NAME, LFS_O_RDWR | LFS_O_CREAT)) {
+						
+						/* Import virtual disk memory card to LFS */
+						while(true) {
+							UINT bytes_read;
+							if(FR_OK != f_read(&memcard_fat, working_buffer, WORK_BUFF_SIZE, &bytes_read)) {
+								status = 1;	// error during virtual disk read
+								break;
+							}
+							if(lfs_file_write(&lfs, &memcard_lfs, working_buffer, bytes_read) < 0) {
+								status = 1;	/// error during LFS write
+								break;	
+							}
+							if(bytes_read < WORK_BUFF_SIZE)
+								break;	// reached EOF, copy completed
+						}
+						lfs_file_close(&lfs, &memcard_lfs);
+					} else {
+						status = 1;	// failed to open/create new memory card file
+					}
+					lfs_unmount(&lfs);
+				} else {
+					status = 1;	// unable to mount LFS
+				}
+			} else {
+				status = 1;	// image has incorrect size
+			}
+			f_close(&memcard_fat);
+		} 
+		else {
 			status = 1;	// unable to find memory card on virtual disk
 		}
 		f_unmount("");

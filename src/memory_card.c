@@ -7,15 +7,23 @@
 #include "led.h"
 #include "config.h"
 
-uint32_t memory_card_init(memory_card_t* mc) {
+uint32_t memory_card_init(memory_card_t* mc, bool exploit) {
 	if(!mc)
 		return MC_NO_INIT;
+	mc->exploit = exploit;
 	mc->flag_byte = MC_FLAG_BYTE_DEF;
 	mc->data = (uint8_t*) malloc(sizeof(uint8_t) * MC_SIZE);
 	if(!mc->data)
 		return MC_NO_INIT;	// malloc failed
 	mc->out_of_sync = false;
 	mc->last_operation_timestamp = 0;
+	return MC_OK;
+}
+
+uint32_t memory_card_free(memory_card_t* mc) {
+	if(!mc)
+		return MC_NO_INIT;
+	free(mc->data);
 	return MC_OK;
 }
 
@@ -83,7 +91,10 @@ void memory_card_update_timestamp(memory_card_t* mc) {
 }
 
 uint32_t memory_card_sync(memory_card_t* mc) {
+
 	uint32_t status = 0;
+	if (mc->exploit)
+		return status;
 	multicore_lockout_start_blocking();
 	if(mc) {
 		lfs_t lfs;
